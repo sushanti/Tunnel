@@ -3,11 +3,14 @@ var wasp = document.getElementById("wasp");
 var scoreCounter = document.getElementById("score");
 var levelCounter = document.getElementById("level");
 var objects = document.getElementsByClassName("object");
+var honeyStore = [];
 var ui = document.getElementById("ui");
 var uiText = document.getElementById("text");
 var uiScore = document.getElementById("uiScore");
 var playButton = document.getElementById("play");
+var previewButton = document.getElementById("preview");
 var highscoreHolder = document.getElementById("highscore")
+var honeys=2; //impossible to win , but just to test the feature
 if(localStorage.getItem('highscore') === null){
    localStorage.setItem('highscore', '0')
    }
@@ -79,7 +82,7 @@ function collided(el1, el2) {
 }
 
 // Create obstacles / points
-function makeDiv(id, text, cl) 
+function makeDiv(id, text, cl, top="") 
 {
   var el;
   el = document.createElement("div");
@@ -87,8 +90,9 @@ function makeDiv(id, text, cl)
   el.id = id;
   el.className = cl;
   document.body.appendChild(el);
-  el.style.top = ( Math.floor(Math.random() * ( screenHeight - scoreHeight) ) + scoreHeight ) + "px";
+  el.style.top = top !== "" ? top : ( Math.floor(Math.random() * ( screenHeight - scoreHeight) ) + scoreHeight ) + "px";
   el.style.left = screenWidth + "px";
+  return el;
 }
 
 //ui
@@ -98,10 +102,11 @@ function uiSet(state) {
     wasp.style.display = "none";
     ui.style.display = "block";
     playButton.innerHTML = "PLAY";
+	previewButton.innerHTML="PREVIEW";
     uiScore.innerHTML = "";
     uiText.style.fontSize = (screenHeight / 150) + 'em';
     uiText.innerHTML = "Tunnel";
-    highscoreHolder.style.display = "none"
+    highscoreHolder.style.display = "none";
   }
   if (state == "end") {
     ui.style.display = "block";
@@ -162,17 +167,37 @@ function gameStart() {
   levelCounter.innerHTML = "Level " + current_level
 }
 
+//game preview
+function gamePreview() {
+  uiSet("none");
+  myMusic = new sound("audio/Omniworld.mp3");
+  myMusic.play();
+  wasp.style.display = "none";
+  scoreCounter.innerHTML = "0";
+  levelCounter.innerHTML = "Level " + current_level
+  gamePreviewLoop();
+}
+
 //game end
-function gameEnd(defeat = true) {
+function gameEnd(defeat) {
 
   levelCounter.style.visibility = "hidden";
   scoreCounter.style.visibility = "hidden";
 
   // Set screen depending on result
-  if (defeat){
-    uiSet("end");
-  }else{
-    uiSet("win");
+  switch(defeat){
+	  case 0:
+	  uiSet("win");
+	  break;
+	  
+	  case 1:
+	  uiSet("end");
+	  break;
+	  
+	  default:
+	  clearInterval(previewLoop);
+	  uiSet("start");
+	  
   }
 
   gameoff = true;
@@ -180,15 +205,16 @@ function gameEnd(defeat = true) {
   myMusic.stop()
   objects = document.getElementsByClassName("object");
   var i = objects.length - 1;
-  while (i--) {
+  while (i>=0) {
     document.body.removeChild(objects[i]);
+	i--;
   }
   if(parseInt(localStorage.getItem('highscore')) < score){
      localStorage.setItem('highscore', score + "")
       
      }
   highscoreHolder.innerHTML = "Personal Best: " + localStorage.getItem('highscore')
-}
+}	
 
 // Movement keystroke
 var Keys = {
@@ -227,6 +253,7 @@ function gameLoop()
   score = 0;
   var i = 0;
   var speed = 0;
+  var j=0;
   loop = setInterval(function() 
   {
     // Current wasp coordiantes
@@ -253,7 +280,7 @@ function gameLoop()
       if (collided(objects[x], wasp) == "hit"  ) {
         if (objects[x].className == "object enemy") {
           current_level = 1;
-          gameEnd(defeat = true);
+          gameEnd(1);
         }
         else{
           // add points
@@ -262,13 +289,13 @@ function gameLoop()
           scoreCounter.innerHTML = score;
           if (score == 60){
             current_level = current_level + 1 ;
-            gameEnd(defeat = false);
+            gameEnd(0);
           }
           //document.body.style.backgroundColor =  'rgba(135,93,61,' + (1-0.7*score/60) + ')';
         }
       }
       //remove unseen objects
-      if (objects[x].offsetLeft < 0) {
+      if (objects[x] && objects[x].offsetLeft < 0) {
         document.body.removeChild(objects[x]);
       }
     }
@@ -283,12 +310,58 @@ function gameLoop()
     // every 1/3 of a sec
     if (i % 19 === 0 && i !== 0) {
       if (i % 3 == 0 ){
-        // Points
-        makeDiv("id", "", "object point");
+        // Get the top position in px of the points generated in preview
+		if(honeyStore && honeyStore.length>0){
+			if(j<honeys){
+				makeDiv("id", "", "object point",honeyStore[j].style.top)
+				j++;
+			}
+		}
+		//player did not click on preview button and therefore generating random points
+		else{
+			makeDiv("id", "", "object point")
+		}
+		
       } else {
         //Enemies
         makeDiv("id", "", "object enemy")
       }
+    }
+  }, 16);
+}
+
+// Preview game loop
+function gamePreviewLoop() 
+{
+  var i = 0;
+  var speed = 10;
+  honeyStore=[];
+  previewLoop = setInterval(function() 
+  {
+    i++;
+	
+    for (x = 0; x < objects.length; x++) {
+      // Smooth accerleration depending on current_level
+      objects[x].style.left = objects[x].offsetLeft - (5*(Math.floor(current_level/5)+1) + speed) + "px";
+
+      //remove unseen objects
+      if (objects[x].offsetLeft < 0) {
+        document.body.removeChild(objects[x]);
+		
+		if(honeyStore[honeys-1] && objects[x]==honeyStore[honeys-1]){
+			gameEnd(5);
+		}
+      }
+	  
+    }
+    
+    // every 1/3 of a sec
+    if (i % 19 === 0 && i !== 0) {
+      if (i % 3 == 0 ){
+        // Points
+		if(honeyStore.length<=honeys)
+			honeyStore.push(makeDiv("id", "", "object point"));
+      } 
     }
   }, 16);
 }
@@ -304,5 +377,11 @@ playButton.addEventListener("click", function() {
   }
 });
 
+previewButton.addEventListener("click", function() {
+	gamePreview();
+});
+
+
 
 init();
+
